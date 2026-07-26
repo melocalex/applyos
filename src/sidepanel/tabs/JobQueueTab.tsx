@@ -41,6 +41,8 @@ interface Props {
   items: QueuedJobUrl[];
   settings: Settings;
   currentQueueId?: string;
+  linkedinBulkOpening: boolean;
+  onOpenLinkedInExternal: () => void;
   onImportText: (input: string) => void;
   onOpen: (item: QueuedJobUrl) => void;
   onScan: () => void;
@@ -121,7 +123,7 @@ export function JobQueueTab(props: Props) {
       <div className="section-heading">
         <div>
           <h1>Job Queue</h1>
-          <p>Review pasted job URLs one at a time. Nothing is scanned or applied in the background.</p>
+          <p>Collect or paste job URLs, then review them one at a time. Nothing is applied in the background.</p>
         </div>
         <Button variant={reviewMode ? "secondary" : "primary"} onClick={() => setReviewMode(!reviewMode)}>
           <ListChecks size={16} /> {reviewMode ? "Queue List" : "Review Mode"}
@@ -152,6 +154,33 @@ export function JobQueueTab(props: Props) {
             <Play size={16} /> Start Review
           </Button>
         </div>
+      </Card>
+
+      <Card className="scan-card">
+        <div className="card-header">
+          <div>
+            <p className="eyebrow">LinkedIn search helper</p>
+            <h2>Open external application pages</h2>
+            <p>
+              From the active LinkedIn Jobs search, inspect up to 20 loaded roles
+              and open company application pages in background tabs.
+            </p>
+          </div>
+        </div>
+        <div className="button-row">
+          <Button
+            variant="primary"
+            loading={props.linkedinBulkOpening}
+            onClick={props.onOpenLinkedInExternal}
+          >
+            {!props.linkedinBulkOpening ? <ExternalLink size={16} /> : null}
+            {props.linkedinBulkOpening ? "Checking loaded roles…" : "Open External Roles"}
+          </Button>
+        </div>
+        <p className="subtle">
+          One confirmation is shown first. Easy Apply is skipped, and nothing is
+          filled or submitted.
+        </p>
       </Card>
 
       <QueueStats stats={stats} />
@@ -235,7 +264,7 @@ export function JobQueueTab(props: Props) {
       )}
 
       <Notice tone="info">
-        Queue URLs are stored locally. Open behavior: {recommendationLabel(props.settings.queueOpenBehavior)}. ApplyOS does not read open Chrome tabs automatically and never auto-applies or auto-submits.
+        Queue URLs are stored locally. Open behavior: {recommendationLabel(props.settings.queueOpenBehavior)}. ApplyOS reads the active LinkedIn search only when you click the bulk action and never auto-applies or auto-submits.
       </Notice>
     </div>
   );

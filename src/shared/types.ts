@@ -328,6 +328,26 @@ export interface QueuedJobUrl {
   scannedAt?: string;
 }
 
+export interface LinkedInSearchJob {
+  jobId: string;
+  detailsUrl: string;
+  title?: string;
+  company?: string;
+  location?: string;
+}
+
+export interface LinkedInSearchJobsResponse {
+  jobs: LinkedInSearchJob[];
+  totalFound: number;
+  limit: number;
+}
+
+export type LinkedInApplyTarget =
+  | { kind: "external_url"; url: string; label?: string }
+  | { kind: "external_button"; label?: string }
+  | { kind: "easy_apply"; label?: string }
+  | { kind: "unavailable"; reason: string };
+
 export interface JobListingCache {
   id: string;
   listingUrl: string;
@@ -416,6 +436,9 @@ export interface InsertResult {
 export type ContentMessage =
   | { type: "SCAN_PAGE"; watchDynamicFields: boolean }
   | { type: "EXTRACT_JOB_INFO" }
+  | { type: "COLLECT_LINKEDIN_SEARCH_JOBS"; limit: number }
+  | { type: "GET_LINKEDIN_APPLY_TARGET" }
+  | { type: "CLICK_LINKEDIN_EXTERNAL_APPLY" }
   | { type: "SET_DYNAMIC_WATCH"; enabled: boolean }
   | {
       type: "INSERT_FIELDS_BATCH";

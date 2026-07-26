@@ -12,6 +12,11 @@ import {
 } from "./fieldDetection";
 import { startFieldAutoCapture } from "./fieldAutoCapture";
 import { findLinkedInEasyApplyRoot } from "./linkedinForm";
+import {
+  clickLinkedInExternalApply,
+  collectLinkedInSearchJobs,
+  waitForLinkedInApplyTarget
+} from "./linkedinExternalJobs";
 import { selectAdapter } from "../adapters";
 
 declare global {
@@ -44,6 +49,24 @@ if (!window.__applyosContentLoaded) {
           .then(sendResponse)
           .catch((error) => sendResponse({ error: getErrorMessage(error) }));
         return true;
+      }
+      if (message.type === "COLLECT_LINKEDIN_SEARCH_JOBS") {
+        try {
+          sendResponse(collectLinkedInSearchJobs(message.limit));
+        } catch (error) {
+          sendResponse({ error: getErrorMessage(error) });
+        }
+        return false;
+      }
+      if (message.type === "GET_LINKEDIN_APPLY_TARGET") {
+        waitForLinkedInApplyTarget()
+          .then(sendResponse)
+          .catch((error) => sendResponse({ error: getErrorMessage(error) }));
+        return true;
+      }
+      if (message.type === "CLICK_LINKEDIN_EXTERNAL_APPLY") {
+        sendResponse(clickLinkedInExternalApply());
+        return false;
       }
       if (message.type === "SET_DYNAMIC_WATCH") {
         if (message.enabled) startObserver();

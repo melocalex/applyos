@@ -62,6 +62,9 @@ import {
   type ExperienceDatabase,
   type ExperienceProfile,
   type JobFitScore,
+  type LinkedInApplyTarget,
+  type LinkedInSearchJob,
+  type LinkedInSearchJobsResponse,
   type QueuedJobUrl,
   type QueueStatus,
   type SavedAnswer,
@@ -77,7 +80,8 @@ import {
   getErrorMessage,
   insertIntoField,
   readJsonFile,
-  sendToActiveTab
+  sendToActiveTab,
+  sendToTab
 } from "./lib";
 import { autoInsertFields, autoInsertSummary, findUnfilledSuggestedFields } from "./autoInsert";
 import { AnswerBankTab } from "./tabs/AnswerBankTab";
@@ -131,6 +135,7 @@ export function App() {
   const [suggestions, setSuggestions] = React.useState<Record<string, AnswerSuggestion>>({});
   const [watchDynamic, setWatchDynamic] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
+  const [linkedinBulkOpening, setLinkedinBulkOpening] = React.useState(false);
   const [aiGenerating, setAiGenerating] = React.useState(false);
   const [aiGeneratingLabel, setAiGeneratingLabel] = React.useState<string>();
   const aiAbortRef = React.useRef<AbortController | null>(null);
@@ -1230,6 +1235,107 @@ export function App() {
     setNotice({ tone: "success", text: `Imported ${newItems.length} unique job URLs. ${urls.length - newItems.length} duplicates were skipped.` });
   }
 
+  async function openLinkedInExternalRoles() {
+    if (linkedinBulkOpening) return;
+    try {
+      const [sourceTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (!sourceTab?.id || !isLinkedInJobsUrl(sourceTab.url)) {
+        throw new Error("Open a LinkedIn Jobs search results tab, then try again.");
+      }
+
+      const collected = await sendToTab<LinkedInSearchJobsResponse>(sourceTab.id, {
+        type: "COLLECT_LINKEDIN_SEARCH_JOBS",
+        limit: 20
+      });
+      if (!collected.jobs.length) {
+        throw new Error(
+          "No loaded LinkedIn job cards were found. Scroll the results list to load roles, then try again."
+        );
+      }
+
+      const limitedNote =
+        collected.totalFound > collected.jobs.length
+          ? ` ApplyOS will use the first ${collected.jobs.length} of ${collected.totalFound} loaded roles.`
+          : "";
+      const confirmed = window.confirm(
+        `Open external application pages for ${collected.jobs.length} loaded LinkedIn role${collected.jobs.length === 1 ? "" : "s"}?${limitedNote}\n\nEasy Apply roles will be skipped. ApplyOS will not fill or submit any application.`
+      );
+      if (!confirmed) return;
+
+      setLinkedinBulkOpening(true);
+      setNotice({
+        tone: "info",
+        text: `Inspecting ${collected.jobs.length} LinkedIn roles. External application pages will open in background tabs.`
+      });
+
+      const outcomes: LinkedInOpenOutcome[] = [];
+      let nextIndex = 0;
+      let completed = 0;
+      const workerCount = Math.min(3, collected.jobs.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (nextIndex < collected.jobs.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          const outcome = await inspectLinkedInJob(collected.jobs[index]);
+          outcomes.push(outcome);
+          completed += 1;
+          setNotice({
+            tone: "info",
+            text: `Checked ${completed} of ${collected.jobs.length} LinkedIn roles…`
+          });
+        }
+      });
+      await Promise.all(workers);
+
+      const opened = outcomes.filter(
+        (outcome): outcome is Extract<LinkedInOpenOutcome, { kind: "opened" }> =>
+          outcome.kind === "opened"
+      );
+      const existing = new Set(queue.map((item) => item.normalizedUrl));
+      const now = Date.now();
+      const newQueueItems: QueuedJobUrl[] = [];
+      for (const outcome of opened) {
+        const normalizedUrl = safeNormalizeUrl(outcome.url);
+        if (!normalizedUrl || existing.has(normalizedUrl)) continue;
+        const createdAt = new Date(now + newQueueItems.length).toISOString();
+        const base = createQueuedJobUrl(normalizedUrl, createdAt);
+        newQueueItems.push({
+          ...base,
+          status: "opened",
+          title: outcome.job.title,
+          company: outcome.job.company,
+          location: outcome.job.location,
+          notes: `Opened from LinkedIn job ${outcome.job.jobId}.`,
+          openedAt: createdAt
+        });
+        existing.add(normalizedUrl);
+      }
+      if (newQueueItems.length) await db.queuedJobUrls.bulkPut(newQueueItems);
+      await refresh();
+
+      const easyApply = countOutcome(outcomes, "easy_apply");
+      const fallbacks = countOutcome(outcomes, "manual_fallback");
+      const unavailable = countOutcome(outcomes, "unavailable");
+      const failures = countOutcome(outcomes, "error");
+      const details = [
+        `${opened.length} external page${opened.length === 1 ? "" : "s"} opened`,
+        `${newQueueItems.length} new queue URL${newQueueItems.length === 1 ? "" : "s"}`,
+        easyApply ? `${easyApply} Easy Apply skipped` : "",
+        fallbacks ? `${fallbacks} LinkedIn fallback tab${fallbacks === 1 ? "" : "s"} left open` : "",
+        unavailable ? `${unavailable} unavailable` : "",
+        failures ? `${failures} failed` : ""
+      ].filter(Boolean);
+      setNotice({
+        tone: fallbacks || unavailable || failures ? "warning" : "success",
+        text: `${details.join(" · ")}. No applications were submitted.`
+      });
+    } catch (error) {
+      setNotice({ tone: "danger", text: getErrorMessage(error) });
+    } finally {
+      setLinkedinBulkOpening(false);
+    }
+  }
+
   async function openQueueItem(item: QueuedJobUrl) {
     try {
       const timestamp = new Date().toISOString();
@@ -1421,7 +1527,49 @@ export function App() {
         onRecommendCvWithAi={handleRecommendCvWithAi}
       />
     ),
-    queue: <JobQueueTab items={queue} settings={settings} currentQueueId={currentQueueId} onImportText={importQueueText} onOpen={openQueueItem} onScan={handleScan} onStatus={updateQueueStatus} onRemove={async (id) => { await db.queuedJobUrls.delete(id); if (currentQueueId === id) setCurrentQueueId(undefined); await refresh(); }} onUpdateNotes={updateQueueNotes} onStartReview={startQueueReview} onNext={() => moveQueue(1)} onPrevious={() => moveQueue(-1)} onClearCompleted={async () => { if (window.confirm("Clear completed queue items?")) { await db.queuedJobUrls.where("status").anyOf(["saved", "applied", "skipped", "not_relevant"]).delete(); await refresh(); } }} onClearQueue={async () => { if (window.confirm("Clear the entire job URL queue?")) { await db.queuedJobUrls.clear(); setCurrentQueueId(undefined); await refresh(); } }} onExportJson={() => downloadJson("applyos-job-queue.json", queue)} onExportCsv={() => downloadText("applyos-job-queue.csv", queueToCsv(queue), "text/csv")} onImportJson={importQueueJson} />,
+    queue: (
+      <JobQueueTab
+        items={queue}
+        settings={settings}
+        currentQueueId={currentQueueId}
+        linkedinBulkOpening={linkedinBulkOpening}
+        onOpenLinkedInExternal={openLinkedInExternalRoles}
+        onImportText={importQueueText}
+        onOpen={openQueueItem}
+        onScan={handleScan}
+        onStatus={updateQueueStatus}
+        onRemove={async (id) => {
+          await db.queuedJobUrls.delete(id);
+          if (currentQueueId === id) setCurrentQueueId(undefined);
+          await refresh();
+        }}
+        onUpdateNotes={updateQueueNotes}
+        onStartReview={startQueueReview}
+        onNext={() => moveQueue(1)}
+        onPrevious={() => moveQueue(-1)}
+        onClearCompleted={async () => {
+          if (window.confirm("Clear completed queue items?")) {
+            await db.queuedJobUrls
+              .where("status")
+              .anyOf(["saved", "applied", "skipped", "not_relevant"])
+              .delete();
+            await refresh();
+          }
+        }}
+        onClearQueue={async () => {
+          if (window.confirm("Clear the entire job URL queue?")) {
+            await db.queuedJobUrls.clear();
+            setCurrentQueueId(undefined);
+            await refresh();
+          }
+        }}
+        onExportJson={() => downloadJson("applyos-job-queue.json", queue)}
+        onExportCsv={() =>
+          downloadText("applyos-job-queue.csv", queueToCsv(queue), "text/csv")
+        }
+        onImportJson={importQueueJson}
+      />
+    ),
     answers: (
       <AnswerBankTab
         answers={answers}
@@ -1517,6 +1665,173 @@ export function App() {
       </main>
     </div>
   );
+}
+
+type LinkedInOpenOutcome =
+  | { kind: "opened"; job: LinkedInSearchJob; url: string; tabId: number }
+  | { kind: "easy_apply"; job: LinkedInSearchJob }
+  | { kind: "manual_fallback"; job: LinkedInSearchJob; tabId: number }
+  | { kind: "unavailable"; job: LinkedInSearchJob; reason: string }
+  | { kind: "error"; job: LinkedInSearchJob; reason: string };
+
+async function inspectLinkedInJob(job: LinkedInSearchJob): Promise<LinkedInOpenOutcome> {
+  let detailsTabId: number | undefined;
+  try {
+    const detailsTab = await chrome.tabs.create({ url: job.detailsUrl, active: false });
+    if (detailsTab.id === undefined) throw new Error("Chrome did not create the LinkedIn role tab.");
+    detailsTabId = detailsTab.id;
+    await waitForTabComplete(detailsTabId);
+
+    const target = await sendToTab<LinkedInApplyTarget>(detailsTabId, {
+      type: "GET_LINKEDIN_APPLY_TARGET"
+    });
+    if (target.kind === "easy_apply") {
+      await closeTab(detailsTabId);
+      return { kind: "easy_apply", job };
+    }
+    if (target.kind === "unavailable") {
+      await closeTab(detailsTabId);
+      return { kind: "unavailable", job, reason: target.reason };
+    }
+    if (target.kind === "external_url") {
+      await chrome.tabs.update(detailsTabId, { url: target.url, active: false });
+      return { kind: "opened", job, url: target.url, tabId: detailsTabId };
+    }
+
+    const navigation = watchForApplyNavigation(detailsTabId, job.detailsUrl);
+    const clickResult = await sendToTab<{ clicked: boolean; reason?: string }>(detailsTabId, {
+      type: "CLICK_LINKEDIN_EXTERNAL_APPLY"
+    });
+    if (!clickResult.clicked) {
+      navigation.cancel();
+      await closeTab(detailsTabId);
+      return {
+        kind: "unavailable",
+        job,
+        reason: clickResult.reason ?? "LinkedIn did not open the external application."
+      };
+    }
+
+    const navigatedTabId = await navigation.promise;
+    if (navigatedTabId === undefined) {
+      // Some LinkedIn button handlers reject synthetic clicks. Leaving this
+      // detail page open still removes the need to find/click its list card.
+      return { kind: "manual_fallback", job, tabId: detailsTabId };
+    }
+
+    const navigatedUrl = await waitForExternalTabDestination(navigatedTabId);
+    if (navigatedUrl && isExternalToLinkedIn(navigatedUrl)) {
+      if (navigatedTabId !== detailsTabId) await closeTab(detailsTabId);
+      return { kind: "opened", job, url: navigatedUrl, tabId: navigatedTabId };
+    }
+
+    if (navigatedTabId !== detailsTabId) await closeTab(navigatedTabId);
+    return { kind: "manual_fallback", job, tabId: detailsTabId };
+  } catch (error) {
+    if (detailsTabId !== undefined) await closeTab(detailsTabId);
+    return { kind: "error", job, reason: getErrorMessage(error) };
+  }
+}
+
+function watchForApplyNavigation(
+  sourceTabId: number,
+  sourceUrl: string
+): { promise: Promise<number | undefined>; cancel: () => void } {
+  let finish: (tabId?: number) => void = () => undefined;
+  const promise = new Promise<number | undefined>((resolve) => {
+    let settled = false;
+    const timeout = window.setTimeout(() => done(), 4_000);
+    const onCreated = (tab: chrome.tabs.Tab) => {
+      if (tab.openerTabId === sourceTabId && tab.id !== undefined) done(tab.id);
+    };
+    const onUpdated = (
+      tabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo
+    ) => {
+      if (
+        tabId === sourceTabId &&
+        changeInfo.url &&
+        !samePageUrl(changeInfo.url, sourceUrl)
+      ) {
+        done(tabId);
+      }
+    };
+    function done(tabId?: number) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      chrome.tabs.onCreated.removeListener(onCreated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve(tabId);
+    }
+    finish = done;
+    chrome.tabs.onCreated.addListener(onCreated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+  return { promise, cancel: () => finish() };
+}
+
+async function closeTab(tabId: number): Promise<void> {
+  await chrome.tabs.remove(tabId).catch(() => undefined);
+}
+
+async function waitForExternalTabDestination(
+  tabId: number,
+  timeoutMs = 10_000
+): Promise<string | undefined> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+    if (!tab) return undefined;
+    const candidates = [tab.pendingUrl, tab.url].filter(
+      (value): value is string => Boolean(value)
+    );
+    const external = candidates.find(isExternalToLinkedIn);
+    if (external) return external;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  return undefined;
+}
+
+function countOutcome(outcomes: LinkedInOpenOutcome[], kind: LinkedInOpenOutcome["kind"]): number {
+  return outcomes.filter((outcome) => outcome.kind === kind).length;
+}
+
+function isLinkedInJobsUrl(value?: string): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      /(^|\.)linkedin\.com$/i.test(url.hostname) &&
+      url.pathname.startsWith("/jobs")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isExternalToLinkedIn(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      !/(^|\.)linkedin\.com$/i.test(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function samePageUrl(left: string, right: string): boolean {
+  try {
+    const leftUrl = new URL(left);
+    const rightUrl = new URL(right);
+    leftUrl.hash = "";
+    rightUrl.hash = "";
+    return leftUrl.toString() === rightUrl.toString();
+  } catch {
+    return left === right;
+  }
 }
 
 function safeNormalizeUrl(url: string): string | undefined {

@@ -19,6 +19,19 @@ export async function sendToActiveTab<T>(message: ContentMessage): Promise<T> {
   return response as T;
 }
 
+export async function sendToTab<T>(tabId: number, message: ContentMessage): Promise<T> {
+  const response = (await chrome.runtime.sendMessage({
+    type: "APPLYOS_RELAY_TO_TAB",
+    payload: message,
+    tabId
+  })) as T | { error?: string };
+
+  if (response && typeof response === "object" && "error" in response && response.error) {
+    throw new Error(response.error);
+  }
+  return response as T;
+}
+
 export async function ensureAllTabsConnected(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({ type: "APPLYOS_ENSURE_ALL_TABS" })) as {
     ok?: boolean;
