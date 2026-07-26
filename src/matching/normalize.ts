@@ -3,6 +3,9 @@ export function normalizeText(value: string): string {
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    // Drop sentence-ending periods while preserving technology names such as
+    // .NET and Node.js.
+    .replace(/\.(?=\s|$)/g, " ")
     .replace(/[^a-z0-9+#.\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

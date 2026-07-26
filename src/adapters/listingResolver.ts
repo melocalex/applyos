@@ -1,16 +1,31 @@
 import type { JobInfo, PageContext } from "../shared/types";
 
 const LISTING_SUFFIXES = ["/application", "/apply", "/form"];
+const WORKDAY_FLOW_SUFFIXES = [/\/apply\/applymanually\/?$/i, /\/login\/?$/i];
+
+function stripKnownFlowSuffix(url: URL): boolean {
+  for (const suffix of LISTING_SUFFIXES) {
+    if (url.pathname.toLowerCase().endsWith(suffix)) {
+      url.pathname = url.pathname.slice(0, -suffix.length) || "/";
+      return true;
+    }
+  }
+  if (/myworkdayjobs\.com$|myworkdaysite\.com$/i.test(url.hostname)) {
+    for (const pattern of WORKDAY_FLOW_SUFFIXES) {
+      if (!pattern.test(url.pathname)) continue;
+      url.pathname = url.pathname.replace(pattern, "") || "/";
+      return true;
+    }
+  }
+  return false;
+}
 
 export function resolveListingUrl(context: PageContext): string | undefined {
   try {
     const url = new URL(context.url);
-    for (const suffix of LISTING_SUFFIXES) {
-      if (url.pathname.endsWith(suffix)) {
-        url.pathname = url.pathname.slice(0, -suffix.length) || "/";
-        url.hash = "";
-        return url.toString();
-      }
+    if (stripKnownFlowSuffix(url)) {
+      url.hash = "";
+      return url.toString();
     }
     if (context.hostname.includes("ashbyhq.com")) {
       if (/\/application\/?$/i.test(context.pathname)) {
@@ -29,11 +44,7 @@ export function resolveListingUrl(context: PageContext): string | undefined {
 export function jobListingCacheKey(url: string): string {
   try {
     const parsed = new URL(url);
-    for (const suffix of LISTING_SUFFIXES) {
-      if (parsed.pathname.endsWith(suffix)) {
-        parsed.pathname = parsed.pathname.slice(0, -suffix.length) || "/";
-      }
-    }
+    stripKnownFlowSuffix(parsed);
     parsed.hash = "";
     return parsed.toString();
   } catch {

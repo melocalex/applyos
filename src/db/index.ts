@@ -79,6 +79,7 @@ class ApplyOSDatabase extends Dexie {
 export const db = new ApplyOSDatabase();
 
 const now = () => new Date().toISOString();
+const MAX_SCAN_HISTORY_ROWS = 250;
 
 const SAMPLE_ANSWERS: SavedAnswer[] = [
   {
@@ -118,6 +119,7 @@ const SAMPLE_ANSWERS: SavedAnswer[] = [
 export async function initializeDatabase(): Promise<void> {
   await db.open();
   const settings = await db.settings.get("default");
+  const isNewDatabase = !settings;
   if (!settings) {
     await db.settings.put({ ...DEFAULT_SETTINGS, id: "default" });
   } else {
@@ -127,9 +129,10 @@ export async function initializeDatabase(): Promise<void> {
     }
     await db.settings.put(merged);
   }
-  if ((await db.savedAnswers.count()) === 0) {
+  const savedAnswerCount = await db.savedAnswers.count();
+  if (isNewDatabase && savedAnswerCount === 0) {
     await db.savedAnswers.bulkPut(SAMPLE_ANSWERS);
-  } else {
+  } else if (savedAnswerCount > 0) {
     await cleanupStoredAnswerBank(
       () => db.savedAnswers.toArray(),
       async (answers) => {
@@ -160,16 +163,18 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 export async function exportAllData(): Promise<Record<string, unknown>> {
+  const settings = (await db.settings.toArray()).map(({ openRouterApiKey: _secret, ...value }) => value);
   return {
     exportedAt: now(),
     version: 4,
+    secretsOmitted: ["settings.openRouterApiKey"],
     experienceProfile: await db.experienceProfile.toArray(),
     experienceDatabase: await db.experienceDatabase.toArray(),
     cvSources: await db.cvSources.toArray(),
     jobListingCache: await db.jobListingCache.toArray(),
     userProfile: await db.userProfile.toArray(),
     savedAnswers: await db.savedAnswers.toArray(),
-    settings: await db.settings.toArray(),
+    settings,
     trackedJobs: await db.trackedJobs.toArray(),
     scanHistory: await db.scanHistory.toArray(),
     queuedJobUrls: await db.queuedJobUrls.toArray()
@@ -177,6 +182,16 @@ export async function exportAllData(): Promise<Record<string, unknown>> {
 }
 
 export async function importAllData(data: Record<string, unknown>): Promise<void> {
+  const currentSettings = await db.settings.get("default");
+  const importedSettings = Array.isArray(data.settings)
+    ? data.settings.map((value) => {
+        if (!value || typeof value !== "object") return value;
+        const record = value as Record<string, unknown>;
+        if ("openRouterApiKey" in record || !currentSettings?.openRouterApiKey) return record;
+        return { ...record, openRouterApiKey: currentSettings.openRouterApiKey };
+      })
+    : data.settings;
+
   await db.transaction(
     "rw",
     [
@@ -199,7 +214,7 @@ export async function importAllData(data: Record<string, unknown>): Promise<void
         [db.jobListingCache as Table<unknown, string>, data.jobListingCache],
         [db.userProfile as Table<unknown, string>, data.userProfile],
         [db.savedAnswers as Table<unknown, string>, data.savedAnswers],
-        [db.settings as Table<unknown, string>, data.settings],
+        [db.settings as Table<unknown, string>, importedSettings],
         [db.trackedJobs as Table<unknown, string>, data.trackedJobs],
         [db.scanHistory as Table<unknown, string>, data.scanHistory],
         [db.queuedJobUrls as Table<unknown, string>, data.queuedJobUrls]
@@ -218,4 +233,13 @@ export async function importAllData(data: Record<string, unknown>): Promise<void
 export async function clearAllData(): Promise<void> {
   await db.delete();
   await initializeDatabase();
+}
+
+export async function pruneScanHistory(): Promise<void> {
+  const staleIds = await db.scanHistory
+    .orderBy("scannedAt")
+    .reverse()
+    .offset(MAX_SCAN_HISTORY_ROWS)
+    .primaryKeys();
+  if (staleIds.length) await db.scanHistory.bulkDelete(staleIds);
 }

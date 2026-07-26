@@ -11,8 +11,8 @@ machine, and how to control it.
 - Everything you give it stays in your browser's local **IndexedDB** (via Dexie).
 - The **only** outbound requests are to **OpenRouter**, and only when you have turned off
   *Local-only mode*, set an API key, and triggered an AI action.
-- You can export a full backup or wipe everything at any time from **Settings → Local
-  data**.
+- You can export a backup (excluding your API key) or wipe everything at any time from
+  **Settings → Local data**.
 
 ---
 
@@ -26,6 +26,7 @@ All of the following live in IndexedDB on the device, scoped to the extension:
 - **Experience Database** — the optional merged markdown built from multiple CVs.
 - **CV Library** — imported CV files and their summaries.
 - **Answer Bank** — every answer you save or that AI generates.
+  Sensitive self-identification answers are not auto-saved unless you separately opt in.
 - **Jobs** — your tracker entries.
 - **Job Queue** — the URLs you have imported and their review status.
 - **Scan history** — a record of pages you scanned (URL, platform, field count, title,
@@ -56,7 +57,8 @@ into the build and never sent anywhere else.
 ## Controlling your data
 
 - **Show data before sending** (Settings) — preview the exact AI payload before any request.
-- **Export All** (Settings → Local data) — download a complete JSON backup of every table.
+- **Export All** (Settings → Local data) — download a JSON backup of every table except
+  the OpenRouter API key. Import keeps the key already stored on the current device.
 - **Import All** — restore from a backup; this replaces the matching local tables.
 - **Clear Local Data** — permanently erase everything on this device. This cannot be undone.
 

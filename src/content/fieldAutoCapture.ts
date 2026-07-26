@@ -16,6 +16,7 @@ import {
 import { extractDetectedFields, readFieldValue } from "./fieldDetection";
 
 let platform = "generic";
+let company: string | undefined;
 let debounceTimer: number | undefined;
 let pendingElement: HTMLElement | undefined;
 const lastCaptured = new Map<string, string>();
@@ -23,8 +24,9 @@ const lastCaptured = new Map<string, string>();
 const TEXT_DEBOUNCE_MS = 700;
 const COMBOBOX_DEBOUNCE_MS = 1200;
 
-export function startFieldAutoCapture(currentPlatform: string): () => void {
+export function startFieldAutoCapture(currentPlatform: string, currentCompany?: string): () => void {
   platform = currentPlatform;
+  company = currentCompany?.trim() || undefined;
   const handler = (event: Event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -115,7 +117,8 @@ function captureFromElement(element: HTMLElement): void {
     .sendMessage({
       type: "APPLYOS_FIELD_ANSWERED",
       field: savableField,
-      value
+      value,
+      company
     })
     .catch(() => {
       // Side panel may be closed.

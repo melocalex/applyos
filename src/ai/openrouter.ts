@@ -33,6 +33,86 @@ interface OpenRouterResponse {
   error?: { message?: string };
 }
 
+const OPENROUTER_TIMEOUT_MS = 30_000;
+const OPENROUTER_MAX_ATTEMPTS = 3;
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function retryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("Retry-After");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.min(5_000, Math.max(0, seconds * 1_000));
+    const dateDelay = Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(dateDelay)) return Math.min(5_000, Math.max(0, dateDelay));
+  }
+  return Math.min(4_000, 500 * 2 ** attempt);
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      globalThis.clearTimeout(timer);
+      reject(new DOMException("AI request cancelled.", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function fetchOpenRouterWithRetry(
+  init: RequestInit,
+  signal?: AbortSignal
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < OPENROUTER_MAX_ATTEMPTS; attempt += 1) {
+    throwIfAborted(signal);
+    const controller = new AbortController();
+    let timedOut = false;
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timeout = globalThis.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, OPENROUTER_TIMEOUT_MS);
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        ...init,
+        signal: controller.signal
+      });
+      if (!isRetryableStatus(response.status) || attempt === OPENROUTER_MAX_ATTEMPTS - 1) {
+        return response;
+      }
+      const delay = retryDelayMs(response, attempt);
+      await response.text();
+      await abortableDelay(delay, signal);
+    } catch (error) {
+      throwIfAborted(signal);
+      lastError = error;
+      if (attempt === OPENROUTER_MAX_ATTEMPTS - 1) {
+        if (timedOut) {
+          throw new Error("OpenRouter timed out after 30 seconds. Try again.");
+        }
+        throw error;
+      }
+      await abortableDelay(500 * 2 ** attempt, signal);
+    } finally {
+      globalThis.clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("OpenRouter request failed.");
+}
+
 export async function callOpenRouterJson(
   settings: Settings,
   system: string,
@@ -43,14 +123,13 @@ export async function callOpenRouterJson(
   if (!settings.openRouterApiKey) throw new Error("Add an OpenRouter API key in Settings.");
   throwIfAborted(signal);
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await fetchOpenRouterWithRetry({
     method: "POST",
     headers: {
       Authorization: `Bearer ${settings.openRouterApiKey}`,
       "Content-Type": "application/json",
       "X-Title": "ApplyOS"
     },
-    signal,
     body: JSON.stringify({
       model: resolveOpenRouterModel(settings.openRouterModel),
       temperature: 0,
@@ -60,7 +139,7 @@ export async function callOpenRouterJson(
         { role: "user", content: user }
       ]
     })
-  });
+  }, signal);
 
   // Read the body as text first: gateway/5xx errors often return an HTML page,
   // and calling response.json() on that throws a raw SyntaxError that masks the
@@ -292,15 +371,13 @@ Return JSON with an answers array containing exactly ${questions.length} entries
 
   const used = new Set<BatchAnswerResult>();
 
+  const positionalFallbackIsSafe =
+    answers.length === questions.length &&
+    answers.every((entry) => !entry.fieldId?.trim());
+
   return questions.map((question, index) => {
     let match = byFieldId.get(question.fieldId);
     if (match) {
-      used.add(match);
-      return { ...match, fieldId: question.fieldId };
-    }
-
-    if (answers[index] && !used.has(answers[index])) {
-      match = answers[index];
       used.add(match);
       return { ...match, fieldId: question.fieldId };
     }
@@ -325,10 +402,10 @@ Return JSON with an answers array containing exactly ${questions.length} entries
       return { ...match, fieldId: question.fieldId };
     }
 
-    const unused = answers.find((entry) => !used.has(entry));
-    if (unused && answers.length === questions.length) {
-      used.add(unused);
-      return { ...unused, fieldId: question.fieldId };
+    if (positionalFallbackIsSafe && answers[index] && !used.has(answers[index])) {
+      match = answers[index];
+      used.add(match);
+      return { ...match, fieldId: question.fieldId };
     }
 
     return {

@@ -103,7 +103,7 @@ async function scanPage(watchDynamicFields: boolean): Promise<ScanResult> {
   else stopObserver();
 
   stopFieldAutoCapture?.();
-  stopFieldAutoCapture = startFieldAutoCapture(adapter.id);
+  stopFieldAutoCapture = startFieldAutoCapture(adapter.id, jobInfo.company);
 
   const hasApplyButton = context.buttons.some((button) => /\bapply\b/i.test(button));
   const hasJobOnPage = (context.jobPostingText?.trim().length ?? 0) >= 200;

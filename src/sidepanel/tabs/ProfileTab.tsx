@@ -22,7 +22,7 @@ export function ProfileTab({ profile, onSave }: { profile?: UserProfile; onSave:
     ["education", "College / university", "text"], ["referralSource", "How did you hear about us?", "text"],
     ["inOfficePreference", "In-office preference (Yes/No)", "text"],
     ["workAuthorization", "Work authorization (Yes/No)", "text"], ["visaSponsorship", "Visa sponsorship (Yes/No)", "text"],
-    ["salaryExpectation", "Salary expectation", "text"], ["startDate", "Start date", "text"]
+    ["salaryExpectation", "Salary expectation", "text"], ["startDate", "Start date", "date"]
   ];
   return (
     <div className="stack">

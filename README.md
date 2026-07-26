@@ -253,7 +253,8 @@ All settings are local and persisted in your browser. Defaults are shown in **bo
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Auto-insert fields on scan | **On** | After scanning, fills safe profile fields and high-confidence Answer Bank matches into the page. |
-| Auto-save new screening answers | **On** | When you answer work-authorization, timezone, location, or voluntary-survey questions on the page, ApplyOS saves them to your Answer Bank. |
+| Auto-save new screening answers | **On** | Saves reusable screening and application answers as you complete a page. Sensitive self-identification answers are excluded. |
+| Auto-save sensitive self-identification answers | **Off** | Explicitly allows demographic, disability, veteran, age, pronoun, and voluntary-disclosure answers to be stored locally. |
 | Job fit threshold | **70%** | The fit score above which a role is treated as a good match. |
 
 ### Job Queue
@@ -266,8 +267,8 @@ All settings are local and persisted in your browser. Defaults are shown in **bo
 
 ### Local data
 
-- **Export All** — download a complete JSON backup (settings, profile, answers, jobs,
-  queue, scan history).
+- **Export All** — download a JSON backup (settings, profile, answers, jobs,
+  queue, scan history). The OpenRouter API key is deliberately omitted.
 - **Import All** — restore from a backup. This replaces the matching local tables.
 - **Clear Local Data** — wipe everything on this device (irreversible).
 
@@ -280,7 +281,7 @@ All settings are local and persisted in your browser. Defaults are shown in **bo
   browser's local IndexedDB (via Dexie).
 - The **only** outbound network requests are to **OpenRouter**, and only when **you** have
   turned off Local-only mode, added a key, and triggered an AI action.
-- Your OpenRouter API key is stored locally and never embedded in the build.
+- Your OpenRouter API key is stored locally, never embedded in the build, and omitted from exports.
 - Use **Settings → Export All** to back up and **Clear Local Data** to erase everything.
 
 For the full data model, the exact payload of every AI request, and what is and is not
