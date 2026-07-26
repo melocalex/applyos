@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   AlertTriangle,
   Clipboard,
+  Crosshair,
   FileText,
   Pencil,
   RefreshCw,
@@ -51,6 +52,7 @@ interface Props {
   onScan: () => void;
   onExtractJobInfo: () => void;
   onInsert: (field: DetectedField, value: string, savedAnswerId?: string) => void;
+  onFocusField: (field: DetectedField) => void;
   onAutofillSafe: (fields: DetectedField[]) => void;
   onSaveJob: (status: "saved" | "applied" | "skipped") => void;
   onSmartMatch: (field: DetectedField, candidates: SavedAnswer[]) => void;
@@ -339,6 +341,7 @@ function CvRecommendationCard(props: Props) {
   if (!recommendation) return null;
 
   const recommended = props.cvSources.find((cv) => cv.id === recommendation.recommendedCvId);
+  const resumeField = props.scan?.fields.find((field) => field.category === "resume");
 
   return (
     <Card className="fit-card">
@@ -374,6 +377,11 @@ function CvRecommendationCard(props: Props) {
         </div>
       ) : null}
       <div className="button-row">
+        {resumeField ? (
+          <Button variant="primary" onClick={() => props.onFocusField(resumeField)}>
+            <Crosshair size={16} /> Show upload field
+          </Button>
+        ) : null}
         <Button
           onClick={() =>
             navigator.clipboard.writeText(recommended?.fileName ?? recommendation.recommendedFileName)

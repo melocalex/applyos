@@ -1,4 +1,8 @@
-import { findBestScreeningAnswer, findAnswerMatches } from "../matching/answerMatcher";
+import {
+  findBestApplicationAnswer,
+  findBestScreeningAnswer,
+  findAnswerMatches
+} from "../matching/answerMatcher";
 import { isUnsafeShortAnswer } from "../shared/answerQuality";
 import { isApplicationQuestionField } from "../shared/applicationFields";
 import { isProfileLinkField, labelRequestsProfileLink } from "../shared/profileLinkFields";
@@ -267,11 +271,12 @@ function resolveInsertValue(
   }
 
   if (isApplicationQuestionField(resolvedField)) {
-    const exact = savedAnswers.find(
-      (answer) => answer.normalizedQuestion === resolvedField.normalizedLabel
-    );
-    if (exact && !isUnsafeShortAnswer(resolvedField, exact.answer)) {
-      return { value: formatAnswerForField(field, exact.answer), savedAnswerId: exact.id };
+    const reusable = findBestApplicationAnswer(resolvedField, savedAnswers);
+    if (reusable) {
+      return {
+        value: formatAnswerForField(field, reusable.answer.answer),
+        savedAnswerId: reusable.answer.id
+      };
     }
     return undefined;
   }

@@ -43,8 +43,10 @@ interface Props {
   currentQueueId?: string;
   linkedinBulkOpening: boolean;
   onOpenLinkedInExternal: () => void;
+  onLinkedInPreScreenChange: (enabled: boolean) => void;
   onImportText: (input: string) => void;
   onOpen: (item: QueuedJobUrl) => void;
+  onStartApplySession: (item: QueuedJobUrl) => void;
   onScan: () => void;
   onStatus: (item: QueuedJobUrl, status: QueueStatus) => void;
   onRemove: (id: string) => void;
@@ -104,13 +106,14 @@ export function JobQueueTab(props: Props) {
       // Cmd+A / Ctrl+R etc. are browser shortcuts, not review actions.
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (["n", "s", "k", "a", "r", "o"].includes(key)) event.preventDefault();
+      if (["n", "s", "k", "a", "r", "o", "p"].includes(key)) event.preventDefault();
       if (key === "n") props.onNext();
       if (key === "s") props.onStatus(current, "saved");
       if (key === "k") props.onStatus(current, "skipped");
       if (key === "a") props.onStatus(current, "applied");
       if (key === "r") props.onScan();
       if (key === "o") props.onOpen(current);
+      if (key === "p") props.onStartApplySession(current);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -177,9 +180,21 @@ export function JobQueueTab(props: Props) {
             {props.linkedinBulkOpening ? "Checking loaded roles…" : "Open External Roles"}
           </Button>
         </div>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={props.settings.linkedinPreScreenEnabled}
+            onChange={(event) =>
+              props.onLinkedInPreScreenChange(event.target.checked)
+            }
+          />
+          <span>
+            Only open roles at or above my {props.settings.jobFitThreshold}% fit threshold
+          </span>
+        </label>
         <p className="subtle">
-          One confirmation is shown first. Easy Apply is skipped, and nothing is
-          filled or submitted.
+          One confirmation is shown first. Duplicate LinkedIn roles and Easy Apply
+          are skipped, and nothing is submitted.
         </p>
       </Card>
 
@@ -215,6 +230,7 @@ export function JobQueueTab(props: Props) {
             index={currentIndex}
             total={props.items.length}
             onOpen={props.onOpen}
+            onStartApplySession={props.onStartApplySession}
             onScan={props.onScan}
             onStatus={props.onStatus}
             onPrevious={props.onPrevious}
@@ -250,6 +266,7 @@ export function JobQueueTab(props: Props) {
                   item={item}
                   isCurrent={item.id === props.currentQueueId}
                   onOpen={props.onOpen}
+                  onStartApplySession={props.onStartApplySession}
                   onScan={props.onScan}
                   onStatus={props.onStatus}
                   onRemove={props.onRemove}
@@ -297,6 +314,7 @@ function QueueItemCard({
   item,
   isCurrent,
   onOpen,
+  onStartApplySession,
   onScan,
   onStatus,
   onRemove,
@@ -305,6 +323,7 @@ function QueueItemCard({
   item: QueuedJobUrl;
   isCurrent: boolean;
   onOpen: (item: QueuedJobUrl) => void;
+  onStartApplySession: (item: QueuedJobUrl) => void;
   onScan: () => void;
   onStatus: (item: QueuedJobUrl, status: QueueStatus) => void;
   onRemove: (id: string) => void;
@@ -316,7 +335,14 @@ function QueueItemCard({
       <Field label="Notes">
         <textarea rows={2} defaultValue={item.notes ?? ""} onBlur={(event) => onUpdateNotes(item, event.target.value)} />
       </Field>
-      <QueueActions item={item} onOpen={onOpen} onScan={onScan} onStatus={onStatus} onRemove={onRemove} />
+      <QueueActions
+        item={item}
+        onOpen={onOpen}
+        onStartApplySession={onStartApplySession}
+        onScan={onScan}
+        onStatus={onStatus}
+        onRemove={onRemove}
+      />
     </Card>
   );
 }
@@ -326,6 +352,7 @@ function ReviewCard({
   index,
   total,
   onOpen,
+  onStartApplySession,
   onScan,
   onStatus,
   onPrevious,
@@ -336,6 +363,7 @@ function ReviewCard({
   index: number;
   total: number;
   onOpen: (item: QueuedJobUrl) => void;
+  onStartApplySession: (item: QueuedJobUrl) => void;
   onScan: () => void;
   onStatus: (item: QueuedJobUrl, status: QueueStatus) => void;
   onPrevious: () => void;
@@ -349,12 +377,18 @@ function ReviewCard({
       <Field label="Notes">
         <textarea rows={4} defaultValue={item.notes ?? ""} onBlur={(event) => onUpdateNotes(item, event.target.value)} />
       </Field>
-      <QueueActions item={item} onOpen={onOpen} onScan={onScan} onStatus={onStatus} />
+      <QueueActions
+        item={item}
+        onOpen={onOpen}
+        onStartApplySession={onStartApplySession}
+        onScan={onScan}
+        onStatus={onStatus}
+      />
       <div className="button-row">
         <Button onClick={onPrevious} disabled={index === 0}><ArrowLeft size={16} /> Previous</Button>
         <Button variant="primary" onClick={onNext} disabled={index >= total - 1}>Next <ArrowRight size={16} /></Button>
       </div>
-      <p className="subtle">Shortcuts: N next · S save · K skip · A applied · R rescan · O open</p>
+      <p className="subtle">Shortcuts: P apply session · N next · S save · K skip · A applied · R rescan · O open</p>
     </Card>
   );
 }
@@ -384,12 +418,14 @@ function QueueItemSummary({ item }: { item: QueuedJobUrl }) {
 function QueueActions({
   item,
   onOpen,
+  onStartApplySession,
   onScan,
   onStatus,
   onRemove
 }: {
   item: QueuedJobUrl;
   onOpen: (item: QueuedJobUrl) => void;
+  onStartApplySession: (item: QueuedJobUrl) => void;
   onScan: () => void;
   onStatus: (item: QueuedJobUrl, status: QueueStatus) => void;
   onRemove?: (id: string) => void;
@@ -400,10 +436,12 @@ function QueueActions({
   return (
     <>
       <div className="button-row">
+        <Button variant="primary" onClick={() => onStartApplySession(item)}>
+          <Play size={16} /> Start Apply Session
+        </Button>
         <Button onClick={() => onOpen(item)}><ExternalLink size={16} /> Open</Button>
         <Button onClick={onScan}><ScanSearch size={16} /> Scan Current Page</Button>
-        <Button variant="primary" onClick={() => onStatus(item, "applied")}>Mark Applied</Button>
-        <Button onClick={() => onStatus(item, "opened")}>Apply / Continue</Button>
+        <Button onClick={() => onStatus(item, "applied")}>Mark Applied</Button>
       </div>
       <div className="button-row">
         <Button variant="ghost" onClick={() => onStatus(item, "saved")}>Save Job</Button>

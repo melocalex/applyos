@@ -26,6 +26,14 @@ const TAG_MATCH_CATEGORIES = new Set<FieldCategory>([
   "voluntary_disclosure"
 ]);
 
+const SAFE_SEMANTIC_APPLICATION_CATEGORIES = new Set<SavedAnswer["category"]>([
+  "about_me",
+  "hard_problem",
+  "leadership",
+  "conflict",
+  "portfolio"
+]);
+
 /** Tokens too generic to indicate that two screening questions ask about the same thing. */
 const GENERIC_QUESTION_TOKENS = new Set([
   "have", "with", "your", "yours", "what", "this", "that", "than", "then", "they", "them", "their", "there",
@@ -93,6 +101,43 @@ export function hasCloseAnswerMatch(
   return matches.length > 0 && matches[0].confidence >= threshold;
 }
 
+/**
+ * Reuse intent-equivalent long-form answers locally. Categories such as
+ * why_company and why_role are intentionally excluded because their answers
+ * are usually specific to one employer or role.
+ */
+export function findBestApplicationAnswer(
+  field: DetectedField,
+  answers: SavedAnswer[]
+): AnswerMatch | undefined {
+  const exact = answers.find(
+    (answer) => answer.normalizedQuestion === field.normalizedLabel
+  );
+  if (exact && !isUnsafeShortAnswer(field, exact.answer)) {
+    return { answer: exact, confidence: 1 };
+  }
+
+  const answerCategory = fieldCategoryToAnswerCategory(field.category);
+  if (!answerCategory || !SAFE_SEMANTIC_APPLICATION_CATEGORIES.has(answerCategory)) {
+    return undefined;
+  }
+
+  const sameIntent = answers.filter(
+    (answer) =>
+      answer.category === answerCategory &&
+      !isUnsafeShortAnswer(field, answer.answer)
+  );
+  if (!sameIntent.length) return undefined;
+
+  const preferred = pickPreferredAnswer(sameIntent);
+  return {
+    answer: preferred,
+    // Category classification supplies the semantic intent; repeated use adds
+    // a small trust signal without ever bypassing the manual review UI.
+    confidence: Math.min(0.94, 0.86 + Math.min(preferred.timesUsed, 4) * 0.02)
+  };
+}
+
 export function hasExactSavedAnswer(
   answers: SavedAnswer[],
   question: string,
@@ -124,6 +169,26 @@ function pickPreferredAnswer(candidates: SavedAnswer[]): SavedAnswer {
     if (right.timesUsed !== left.timesUsed) return right.timesUsed - left.timesUsed;
     return right.updatedAt.localeCompare(left.updatedAt);
   })[0];
+}
+
+function fieldCategoryToAnswerCategory(
+  category?: FieldCategory
+): SavedAnswer["category"] | undefined {
+  if (
+    category &&
+    [
+      "why_company",
+      "why_role",
+      "about_me",
+      "hard_problem",
+      "leadership",
+      "conflict",
+      "portfolio"
+    ].includes(category)
+  ) {
+    return category as SavedAnswer["category"];
+  }
+  return undefined;
 }
 
 /** Best saved answer for screening / EEO fields — exact question, category, then fuzzy label. */

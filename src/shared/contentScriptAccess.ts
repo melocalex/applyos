@@ -252,7 +252,12 @@ export async function sendMessageToTab<T>(tabId: number, message: ContentMessage
     return (await broadcastMessage<T>(tabId, message)) as T;
   }
 
-  if (message.type === "INSERT_FIELD" || message.type === "INSERT_FIELDS_BATCH" || message.type === "GET_FIELD_VALUE") {
+  if (
+    message.type === "INSERT_FIELD" ||
+    message.type === "INSERT_FIELDS_BATCH" ||
+    message.type === "GET_FIELD_VALUE" ||
+    message.type === "FOCUS_FIELD"
+  ) {
     return routeFieldMessage<T>(tabId, message);
   }
 

@@ -96,6 +96,17 @@ if (!window.__applyosContentLoaded) {
         sendResponse({ ok: Boolean(element), value: readFieldValue(element) });
         return false;
       }
+      if (message.type === "FOCUS_FIELD") {
+        const element = findField(message.fieldId, message.selectorHint);
+        if (!element) {
+          sendResponse({ ok: false, error: "The field could not be found. Rescan and try again." });
+          return false;
+        }
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.focus({ preventScroll: true });
+        sendResponse({ ok: true });
+        return false;
+      }
       if (message.type === "PING") {
         sendResponse({ ok: true });
         return false;

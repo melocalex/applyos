@@ -107,6 +107,13 @@ export function formatPhoneForProfile(phone?: string, country?: string): string 
   if (/^\+|^00/.test(trimmed)) return trimmed;
   const dial = dialCodeForCountry(country);
   const national = trimmed.replace(/\D/g, "");
-  if (dial && national) return `+${dial}${national}`;
+  if (dial && national) {
+    // Users often save an international number without the leading "+". Do
+    // not turn a Brazilian "554899..." into "+55554899...".
+    if (national.startsWith(dial) && national.length > dial.length + 6) {
+      return `+${national}`;
+    }
+    return `+${dial}${national}`;
+  }
   return trimmed;
 }

@@ -3,7 +3,7 @@
   "name": "ApplyOS",
   "description": "A local-first, honest job application assistant.",
   "version": "0.2.0",
-  "permissions": ["storage", "scripting", "sidePanel", "tabs", "webNavigation"],
+  "permissions": ["storage", "scripting", "sidePanel", "tabs", "tabGroups", "webNavigation"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "icons": {
     "16": "icons/icon16.png",

@@ -58,6 +58,15 @@ export async function insertIntoField(field: DetectedField, value: string): Prom
   });
 }
 
+export async function focusField(field: DetectedField): Promise<InsertResult> {
+  return sendToActiveTab<InsertResult>({
+    type: "FOCUS_FIELD",
+    fieldId: field.fieldId,
+    selectorHint: field.selectorHint,
+    frameId: field.frameId
+  });
+}
+
 export async function insertFieldsBatch(
   items: Array<{ field: DetectedField; value: string }>
 ): Promise<Array<{ fieldId: string; ok: boolean; error?: string }>> {

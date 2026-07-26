@@ -326,6 +326,9 @@ export interface QueuedJobUrl {
   updatedAt: string;
   openedAt?: string;
   scannedAt?: string;
+  sourcePlatform?: string;
+  sourceJobId?: string;
+  sourceUrl?: string;
 }
 
 export interface LinkedInSearchJob {
@@ -386,7 +389,6 @@ export interface Settings {
   openRouterApiKey?: string;
   openRouterModel?: string;
   smartMatchEnabled: boolean;
-  generateFromExperienceEnabled: boolean;
   jobFitThreshold: number;
   showDataBeforeSending: boolean;
   allowRawCvForExtraction: boolean;
@@ -394,6 +396,7 @@ export interface Settings {
   queueOpenBehavior: "current_tab" | "new_tab" | "background_tab";
   queueAutoScanAfterOpening: boolean;
   queueDevMode: boolean;
+  linkedinPreScreenEnabled: boolean;
   useOptimizedExperienceDatabase: boolean;
   autoSaveNewAnswers: boolean;
   /** Sensitive EEO/self-identification answers require a separate explicit opt-in. */
@@ -439,6 +442,7 @@ export type ContentMessage =
   | { type: "COLLECT_LINKEDIN_SEARCH_JOBS"; limit: number }
   | { type: "GET_LINKEDIN_APPLY_TARGET" }
   | { type: "CLICK_LINKEDIN_EXTERNAL_APPLY" }
+  | { type: "FOCUS_FIELD"; fieldId: string; selectorHint: string; frameId?: number }
   | { type: "SET_DYNAMIC_WATCH"; enabled: boolean }
   | {
       type: "INSERT_FIELDS_BATCH";
@@ -468,7 +472,6 @@ export const DEFAULT_SETTINGS: Settings = {
   id: "default",
   openRouterModel: "google/gemini-2.0-flash-lite-001",
   smartMatchEnabled: false,
-  generateFromExperienceEnabled: false,
   jobFitThreshold: 70,
   showDataBeforeSending: true,
   allowRawCvForExtraction: false,
@@ -476,6 +479,7 @@ export const DEFAULT_SETTINGS: Settings = {
   queueOpenBehavior: "current_tab",
   queueAutoScanAfterOpening: false,
   queueDevMode: false,
+  linkedinPreScreenEnabled: false,
   useOptimizedExperienceDatabase: true,
   autoSaveNewAnswers: true,
   autoSaveSensitiveAnswers: false,

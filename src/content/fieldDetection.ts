@@ -28,6 +28,7 @@ import { isComboboxInput, readComboboxDisplayValue } from "./combobox";
 import { elementNeedsComboboxInsert, insertComboboxValue } from "./comboboxInsert";
 import {
   insertPhoneFieldValue,
+  insertPhoneFieldValueAsync,
   isCompositePhoneInput,
   isPhoneWidgetChrome,
   readPhoneFieldValue
@@ -570,7 +571,7 @@ export async function insertFieldValueAsync(
   }
 
   if (element instanceof HTMLInputElement && isCompositePhoneInput(element)) {
-    return insertPhoneFieldValue(element, value);
+    return insertPhoneFieldValueAsync(element, value);
   }
 
   const widget =
