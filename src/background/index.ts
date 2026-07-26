@@ -47,12 +47,35 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 
 type RuntimeMessage =
   | BackgroundMessage
-  | { type: "APPLYOS_FIELD_ANSWERED"; field: DetectedField; value: string };
+  | {
+      type: "APPLYOS_FIELD_ANSWERED";
+      field: DetectedField;
+      value: string;
+      company?: string;
+    }
+  | {
+      type: "APPLYOS_ANSWER_SAVED";
+      field: DetectedField;
+      value: string;
+      result: "saved" | "updated";
+    };
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
   if (message.type === "APPLYOS_FIELD_ANSWERED") {
-      saveFieldAnswer(message.field, message.value)
-      .then((result) => sendResponse({ ok: true, result }))
+    saveFieldAnswer(message.field, message.value, message.company)
+      .then(async (result) => {
+        if (result !== "skipped") {
+          await chrome.runtime
+            .sendMessage({
+              type: "APPLYOS_ANSWER_SAVED",
+              field: message.field,
+              value: message.value,
+              result
+            })
+            .catch(() => undefined);
+        }
+        sendResponse({ ok: true, result });
+      })
       .catch((error) =>
         sendResponse({
           ok: false,

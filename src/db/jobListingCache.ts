@@ -2,6 +2,8 @@ import type { JobInfo, JobListingCache, PageType } from "../shared/types";
 import { isThinJobInfo, mergeJobInfo } from "../adapters/listingResolver";
 import { db } from "./index";
 
+const MAX_JOB_LISTING_CACHE_ROWS = 150;
+
 export async function saveJobListingCache(entry: {
   listingKey: string;
   listingUrl: string;
@@ -20,6 +22,12 @@ export async function saveJobListingCache(entry: {
     extractedAt: new Date().toISOString()
   };
   await db.jobListingCache.put(record);
+  const staleIds = await db.jobListingCache
+    .orderBy("extractedAt")
+    .reverse()
+    .offset(MAX_JOB_LISTING_CACHE_ROWS)
+    .primaryKeys();
+  if (staleIds.length) await db.jobListingCache.bulkDelete(staleIds);
   return record;
 }
 

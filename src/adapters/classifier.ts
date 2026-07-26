@@ -6,7 +6,14 @@ export function classifyPage(context: PageContext): PageType {
     [context.url, context.title, context.bodyText.slice(0, 20_000), ...context.buttons].join(" ")
   );
   const jobPosting = findJobPosting(context.jsonLd);
-  const hasApplicationFields = context.hasForms && /\b(submit application|resume|cover letter|first name|email)\b/.test(haystack);
+  const hasExplicitApplicationSignal =
+    /\b(submit application|upload (?:your )?(?:resume|cv)|resume|cover letter)\b/.test(haystack);
+  const hasIdentityFieldSet =
+    /\b(first name|given name|forename)\b/.test(haystack) &&
+    /\b(last name|family name|surname)\b/.test(haystack) &&
+    /\be ?mail\b/.test(haystack);
+  const hasApplicationFields =
+    context.hasForms && (hasExplicitApplicationSignal || hasIdentityFieldSet);
   const hasApplyButton = context.buttons.some((button) => /\b(apply|submit application)\b/i.test(button));
   const careerScore = CAREER_KEYWORDS.filter((keyword) => haystack.includes(keyword)).length;
   const manyJobLinks = context.links.filter((link) => /\b(job|position|opening|apply)\b/i.test(link)).length >= 5;
@@ -24,7 +31,13 @@ export function findJobPosting(values: unknown[]): Record<string, unknown> | und
     const value = queue.shift();
     if (!value || typeof value !== "object") continue;
     const record = value as Record<string, unknown>;
-    if (record["@type"] === "JobPosting") return record;
+    const type = record["@type"];
+    if (
+      type === "JobPosting" ||
+      (Array.isArray(type) && type.some((entry) => entry === "JobPosting"))
+    ) {
+      return record;
+    }
     for (const child of Object.values(record)) {
       if (Array.isArray(child)) queue.push(...child);
       else if (child && typeof child === "object") queue.push(child);

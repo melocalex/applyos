@@ -146,16 +146,23 @@ export function DetectedFieldsTab(props: Props) {
         ) : null}
       </Card>
 
-      {hasJobInfo ? (
-        <>
-          <JobCard {...props} />
-          {props.cvSources.length ? <CvRecommendationCard {...props} /> : null}
-          <FitCard fit={props.fit} />
-        </>
-      ) : null}
+      <div
+        className="stale-scan-content stack"
+        ref={(element) => {
+          if (element) element.inert = Boolean(props.scanStale);
+        }}
+        aria-disabled={props.scanStale || undefined}
+      >
+        {hasJobInfo ? (
+          <>
+            <JobCard {...props} />
+            {props.cvSources.length ? <CvRecommendationCard {...props} /> : null}
+            <FitCard fit={props.fit} />
+          </>
+        ) : null}
 
-      {props.scan ? (
-        <>
+        {props.scan ? (
+          <>
           {props.scan.jobInfoExtracted && fields.length === 0 ? (
             <Notice tone="success">
               Job info is extracted and saved for this role. Click Apply on the page, then Scan Page to detect form fields.
@@ -315,13 +322,14 @@ export function DetectedFieldsTab(props: Props) {
               />
             )}
           </FieldGroup>
-        </>
-      ) : (
-        <EmptyState
-          title="Scan a job page"
-          body="Open a listing, careers page, or application form, then scan it from here."
-        />
-      )}
+          </>
+        ) : (
+          <EmptyState
+            title="Scan a job page"
+            body="Open a listing, careers page, or application form, then scan it from here."
+          />
+        )}
+      </div>
     </div>
   );
 }

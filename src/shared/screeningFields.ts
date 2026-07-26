@@ -27,6 +27,7 @@ export function looksLikeApplicationQuestion(label: string): boolean {
 
 const LABEL_TO_CATEGORY: Array<[FieldCategory, RegExp]> = [
   ["pronouns", /\b(preferred )?pronouns?\b/i],
+  ["sexual_orientation", /\bsexual orientation\b/i],
   ["gender", /\b(gender identity|what is your gender)\b/i],
   ["race_ethnicity", /\b(race|ethnicity|ethnic background)\b/i],
   ["veteran_status", /\b(veteran|military service)\b/i],

@@ -24,7 +24,8 @@ import {
   db,
   exportAllData,
   importAllData,
-  initializeDatabase
+  initializeDatabase,
+  pruneScanHistory
 } from "../db";
 import { mergeWithStoredJobInfo, saveJobListingCache } from "../db/jobListingCache";
 import type { ExtractedJobPayload } from "../adapters/extractJob";
@@ -44,7 +45,6 @@ import { saveFieldAnswer } from "../shared/saveFieldAnswer";
 import { enrichCvSourceFromCatalog, heuristicCvSummary, recommendCvLocally } from "../matching/recommendCv";
 import type { CvRecommendation } from "../matching/recommendCv";
 import { normalizeText } from "../matching/normalize";
-import { extractTextFromFile, parseExperienceLocally } from "../parsers/resume";
 import { calculateJobFit } from "../scoring/jobFit";
 import {
   createQueuedJobUrl,
@@ -99,6 +99,19 @@ const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "jobs", label: "Jobs", icon: BriefcaseBusiness },
   { id: "settings", label: "Settings", icon: SettingsIcon }
 ];
+
+async function extractTextFromResumeFile(file: File) {
+  const { extractTextFromFile } = await import("../parsers/resume");
+  return extractTextFromFile(file);
+}
+
+async function parseExperienceFromText(
+  rawText: string,
+  sourceType: ExperienceProfile["sourceType"]
+): Promise<ExperienceProfile> {
+  const { parseExperienceLocally } = await import("../parsers/resume");
+  return parseExperienceLocally(rawText, sourceType);
+}
 
 export function App() {
   const [activeTab, setActiveTab] = React.useState<TabId>("detected");
@@ -289,6 +302,7 @@ export function App() {
         status?: string;
         field?: DetectedField;
         value?: string;
+        result?: "saved" | "updated";
       },
       sender: chrome.runtime.MessageSender
     ) => {
@@ -327,10 +341,23 @@ export function App() {
         setScan((current) => current ? { ...current, watching: false } : current);
         setNotice({ tone: "info", text: message.status || "Dynamic field watch stopped." });
       }
-      if (message.type === "APPLYOS_FIELD_ANSWERED" && message.field && message.value) {
-        handleAutoSaveFieldAnswer(message.field, message.value).catch((error) =>
-          setNotice({ tone: "danger", text: getErrorMessage(error) })
-        );
+      if (
+        message.type === "APPLYOS_ANSWER_SAVED" &&
+        message.field &&
+        message.value &&
+        message.result
+      ) {
+        refresh()
+          .then(() =>
+            setNotice({
+              tone: "success",
+              text:
+                message.result === "updated"
+                  ? `Updated saved answer for “${message.field!.label}”.`
+                  : `Saved “${message.value}” for “${message.field!.label}” to your Answer Bank.`
+            })
+          )
+          .catch((error) => setNotice({ tone: "danger", text: getErrorMessage(error) }));
       }
     };
     runtime.onMessage.addListener(listener);
@@ -399,6 +426,7 @@ export function App() {
         jobTitle: nextResult.jobInfo.title,
         scannedAt: new Date().toISOString()
       });
+      await pruneScanHistory();
       await updateQueueFromScan(nextResult, nextFit);
       const extractedNote = nextResult.jobInfoExtracted ? " Stored job info is attached for the model." : "";
       let noticeText = `Scanned ${nextResult.fields.length} fields with the ${nextResult.adapterName} adapter.${extractedNote}`;
@@ -552,7 +580,7 @@ export function App() {
   async function handleParseExperience(rawText: string, sourceType: ExperienceProfile["sourceType"]) {
     setLoading(true);
     try {
-      let profile = parseExperienceLocally(rawText, sourceType);
+      let profile = await parseExperienceFromText(rawText, sourceType);
       if (!settings.localOnlyMode && settings.openRouterApiKey && settings.allowRawCvForExtraction) {
         if (!confirmData("CV text will be sent to OpenRouter for structured extraction.", rawText.slice(0, 2000))) return;
         const signal = beginAiRequest("Extracting experience profile with AI…");
@@ -817,7 +845,7 @@ export function App() {
       const items: CvSource[] = [];
 
       for (const file of Array.from(files)) {
-        const extracted = await extractTextFromFile(file);
+        const extracted = await extractTextFromResumeFile(file);
         const fileName = file.name;
         const catalogFields = enrichCvSourceFromCatalog(fileName);
         const heuristicFields = heuristicCvSummary(extracted.text, fileName);
@@ -997,19 +1025,6 @@ export function App() {
     } catch (error) {
       handleAiError(error);
     }
-  }
-
-  async function handleAutoSaveFieldAnswer(field: DetectedField, value: string) {
-    const result = await saveFieldAnswer(field, value, scan?.jobInfo.company);
-    if (result === "skipped") return;
-    await refresh();
-    setNotice({
-      tone: "success",
-      text:
-        result === "updated"
-          ? `Updated saved answer for “${field.label}”.`
-          : `Saved “${value}” for “${field.label}” to your Answer Bank.`
-    });
   }
 
   async function handleSaveCurrentValue(field: DetectedField) {
@@ -1433,7 +1448,7 @@ export function App() {
         cvSources={cvSources}
         settings={settings}
         loading={loading}
-        onExtractFile={extractTextFromFile}
+        onExtractFile={extractTextFromResumeFile}
         onParse={handleParseExperience}
         onSave={async (profile) => {
           await db.experienceProfile.put(profile);
@@ -1467,10 +1482,27 @@ export function App() {
       <header className="app-header">
         <div className="brand-mark">A</div>
         <div><strong>ApplyOS</strong><span>Filter first. Assistant second.</span></div>
-        <div className={`privacy-dot ${settings.localOnlyMode ? "is-local" : "is-ai"}`} title={settings.localOnlyMode ? "Local-only mode" : "OpenRouter available"} />
+        <div
+          className={`privacy-dot ${settings.localOnlyMode ? "is-local" : "is-ai"}`}
+          role="status"
+          aria-label={settings.localOnlyMode ? "Local-only mode enabled" : "OpenRouter available"}
+          title={settings.localOnlyMode ? "Local-only mode" : "OpenRouter available"}
+        />
       </header>
       <nav className="tabs tabs-seven" aria-label="ApplyOS sections">
-        {TABS.map(({ id, label, icon: Icon }) => <button key={id} className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)} title={label}><Icon size={17} /><span>{label}</span></button>)}
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={activeTab === id ? "active" : ""}
+            aria-current={activeTab === id ? "page" : undefined}
+            onClick={() => setActiveTab(id)}
+            title={label}
+          >
+            <Icon size={17} aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        ))}
       </nav>
       <main>
         {aiGenerating ? (

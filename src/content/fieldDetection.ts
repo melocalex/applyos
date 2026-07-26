@@ -42,7 +42,7 @@ import { isReactControlledFormHost } from "../shared/reactFormHosts";
 import { resolveFieldWidget } from "./fieldWidgets";
 
 const FIELD_SELECTOR =
-  "textarea, input[type='text'], input[type='email'], input[type='url'], input[type='tel'], input[type='number'], input[type='checkbox'], input[type='radio'], input[type='file'], input:not([type]), select, [contenteditable='true']";
+  "textarea, input[type='text'], input[type='email'], input[type='url'], input[type='tel'], input[type='number'], input[type='date'], input[type='datetime-local'], input[type='month'], input[type='week'], input[type='time'], input[type='search'], input[type='checkbox'], input[type='radio'], input[type='file'], input:not([type]), select, [contenteditable='true']";
 
 const knownFieldIds = new Set<string>();
 let dependencyParents: FieldCategory[] = [];
@@ -355,7 +355,23 @@ function getFieldType(element: HTMLElement): FieldType {
   if (element.isContentEditable) return "textarea";
   if (element instanceof HTMLInputElement) {
     const type = element.type || "text";
-    if (["email", "url", "tel", "number", "checkbox", "radio", "file"].includes(type)) {
+    if (
+      [
+        "email",
+        "url",
+        "tel",
+        "number",
+        "date",
+        "datetime-local",
+        "month",
+        "week",
+        "time",
+        "search",
+        "checkbox",
+        "radio",
+        "file"
+      ].includes(type)
+    ) {
       return type as FieldType;
     }
     return "text";
@@ -576,7 +592,7 @@ export async function insertFieldValueAsync(
     const syncResult = insertFieldValueSync(fieldId, selectorHint, value, widget);
     if (syncResult.ok) {
       const committed = readCommittedInputValue(insertTarget);
-      if (committed.trim() === value.trim() || committed.length > 0) {
+      if (committed.trim() === value.trim()) {
         return syncResult;
       }
     }

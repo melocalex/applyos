@@ -36,7 +36,8 @@ export function SettingsTab({ settings, onSave, onExportAll, onImportAll, onClea
         <Toggle label="Smart Match enabled" checked={draft.smartMatchEnabled} onChange={(value) => setDraft({ ...draft, smartMatchEnabled: value })} />
         <Toggle label="Auto-generate from Experience Profile" checked={draft.generateFromExperienceEnabled} onChange={(value) => setDraft({ ...draft, generateFromExperienceEnabled: value })} />
         <Toggle label="Use optimized multi-CV database for answers" checked={draft.useOptimizedExperienceDatabase} onChange={(value) => setDraft({ ...draft, useOptimizedExperienceDatabase: value })} hint="When enabled, Generate All Answers sends the merged markdown database (Experience tab) with the humanizer prompt instead of the single structured profile JSON." />
-        <Toggle label="Auto-save new screening answers" checked={draft.autoSaveNewAnswers} onChange={(value) => setDraft({ ...draft, autoSaveNewAnswers: value })} hint="When you answer work authorization, timezone, location, or voluntary survey questions on the page, ApplyOS saves them to your Answer Bank for reuse." />
+        <Toggle label="Auto-save new screening answers" checked={draft.autoSaveNewAnswers} onChange={(value) => setDraft({ ...draft, autoSaveNewAnswers: value })} hint="Saves reusable screening and application answers as you complete a page. Sensitive self-identification answers stay excluded." />
+        <Toggle label="Auto-save sensitive self-identification answers" checked={draft.autoSaveSensitiveAnswers} onChange={(value) => setDraft({ ...draft, autoSaveSensitiveAnswers: value })} hint="Off by default. When enabled, demographic, disability, veteran, age, pronoun, and voluntary-disclosure answers may be stored locally." />
         <Toggle label="Auto-insert fields on scan" checked={draft.autoInsertFields} onChange={(value) => setDraft({ ...draft, autoInsertFields: value })} hint="After scanning, fills profile fields and high-confidence Answer Bank matches into the page. Generated answers insert automatically after Generate All Answers." />
         <Toggle label="Auto-generate AI answers on scan" checked={draft.autoGenerateAnswersOnScan} onChange={(value) => setDraft({ ...draft, autoGenerateAnswersOnScan: value })} hint="When Local-only mode is off and an OpenRouter key is set, custom application questions are answered in one batch after each scan. Answers are saved to your Answer Bank." />
         <Field
@@ -71,7 +72,7 @@ export function SettingsTab({ settings, onSave, onExportAll, onImportAll, onClea
       />
       <Card>
         <h2>Local data</h2>
-        <p>Export a complete local backup or clear this device.</p>
+        <p>Export a local backup or clear this device. Your OpenRouter API key is never included in exports.</p>
         <div className="button-row">
           <Button onClick={onExportAll}><Download size={16} /> Export All</Button>
           <label className="button button-secondary"><Upload size={16} /> Import All<input className="sr-only" type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && onImportAll(e.target.files[0])} /></label>

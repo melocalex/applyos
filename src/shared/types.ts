@@ -51,6 +51,12 @@ export type FieldType =
   | "url"
   | "tel"
   | "number"
+  | "date"
+  | "datetime-local"
+  | "month"
+  | "week"
+  | "time"
+  | "search"
   | "select"
   | "checkbox"
   | "radio"
@@ -88,6 +94,7 @@ export type FieldCategory =
   | "start_date"
   | "custom_question"
   | "gender"
+  | "sexual_orientation"
   | "pronouns"
   | "race_ethnicity"
   | "disability"
@@ -369,6 +376,8 @@ export interface Settings {
   queueDevMode: boolean;
   useOptimizedExperienceDatabase: boolean;
   autoSaveNewAnswers: boolean;
+  /** Sensitive EEO/self-identification answers require a separate explicit opt-in. */
+  autoSaveSensitiveAnswers: boolean;
   autoInsertFields: boolean;
   autoGenerateAnswersOnScan: boolean;
   /** Free-text context for open-ended questions (reason for leaving, motivation, etc.). */
@@ -446,6 +455,7 @@ export const DEFAULT_SETTINGS: Settings = {
   queueDevMode: false,
   useOptimizedExperienceDatabase: true,
   autoSaveNewAnswers: true,
+  autoSaveSensitiveAnswers: false,
   autoInsertFields: true,
   autoGenerateAnswersOnScan: true,
   jobSearchContext: DEFAULT_JOB_SEARCH_CONTEXT
