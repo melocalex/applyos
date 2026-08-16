@@ -1,5 +1,5 @@
-export function normalizeText(value: string): string {
-  return value
+export function normalizeText(value?: string | null): string {
+  return (value ?? "")
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")

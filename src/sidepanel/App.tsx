@@ -56,6 +56,7 @@ import { EXPERIENCE_QUESTION_CATEGORIES } from "../shared/constants";
 import {
   DEFAULT_SETTINGS,
   EMPTY_EXPERIENCE_PROFILE,
+  sanitizeExperienceProfile,
   type AnswerSuggestion,
   type CvSource,
   type DetectedField,
@@ -231,7 +232,7 @@ export function App() {
       db.trackedJobs.orderBy("updatedAt").reverse().toArray(),
       db.queuedJobUrls.orderBy("createdAt").toArray()
     ]);
-    setExperience(nextExperience);
+    setExperience(nextExperience ? sanitizeExperienceProfile(nextExperience) : undefined);
     setExperienceDatabase(nextDatabase);
     setCvSources(nextCvSources);
     setUserProfile(nextUserProfile);

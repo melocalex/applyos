@@ -510,3 +510,51 @@ export const EMPTY_EXPERIENCE_PROFILE: ExperienceProfile = {
   languages: [],
   links: []
 };
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+/**
+ * Coerce a stored ExperienceProfile into a well-formed shape. Records written by
+ * the editor can have partially-filled roles/projects that are missing required
+ * strings (title, company) or arrays (highlights, technologies). Downstream
+ * scoring spreads those arrays and passes those strings to normalizeText, which
+ * threw "... is not iterable" / "reading 'toLowerCase'" and aborted the scan.
+ * Filling the gaps once at the read boundary keeps every consumer safe without a
+ * data migration.
+ */
+export function sanitizeExperienceProfile(raw: ExperienceProfile): ExperienceProfile {
+  return {
+    id: "default",
+    rawText: raw.rawText ?? "",
+    sourceType: raw.sourceType ?? "pasted_text",
+    parsedAt: raw.parsedAt ?? "",
+    skills: toStringArray(raw.skills),
+    companies: toStringArray(raw.companies),
+    roles: (Array.isArray(raw.roles) ? raw.roles : []).filter(Boolean).map((role) => ({
+      title: role.title ?? "",
+      company: role.company ?? "",
+      duration: role.duration,
+      location: role.location,
+      highlights: toStringArray(role.highlights),
+      technologies: toStringArray(role.technologies)
+    })),
+    projects: (Array.isArray(raw.projects) ? raw.projects : []).filter(Boolean).map((project) => ({
+      name: project.name ?? "",
+      description: project.description ?? "",
+      technologies: toStringArray(project.technologies),
+      url: project.url,
+      highlights: toStringArray(project.highlights)
+    })),
+    education: (Array.isArray(raw.education) ? raw.education : []).filter(Boolean).map((entry) => ({
+      degree: entry.degree,
+      institution: entry.institution ?? "",
+      year: entry.year,
+      details: entry.details === undefined ? undefined : toStringArray(entry.details)
+    })),
+    certifications: toStringArray(raw.certifications),
+    languages: toStringArray(raw.languages),
+    links: toStringArray(raw.links)
+  };
+}
