@@ -16,15 +16,53 @@ function setNativeInputValue(element: HTMLInputElement, value: string): void {
   setControlledInputValue(element, value);
 }
 
+/**
+ * The clickable react-select control that toggles the menu. The input usually
+ * IS the combobox root (role="combobox"), so findComboboxRoot/closest returns
+ * the input itself — but react-select attaches its open handler to the
+ * `.select__control` wrapper, so a mousedown on the input alone never opens the
+ * menu. Prefer the control wrapper, fall back to the generic root, then self.
+ */
+function comboboxControl(element: HTMLInputElement): HTMLElement {
+  return (
+    element.closest<HTMLElement>('[class*="select__control"]') ??
+    findComboboxRoot(element) ??
+    element
+  );
+}
+
 function openCombobox(element: HTMLInputElement): void {
   element.focus();
-  const root = findComboboxRoot(element) ?? element;
-  const toggle = root.querySelector<HTMLButtonElement>(
+  const control = comboboxControl(element);
+  const toggle = control.querySelector<HTMLButtonElement>(
     'button[aria-label*="flyout" i], button[aria-label*="Toggle" i], button[aria-label*="toggle" i]'
   );
   toggle?.click();
-  element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-  element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  // react-select opens on the control's mousedown (primary button), not on the
+  // inner input. Fire the full press sequence so its handler runs.
+  for (const type of ["pointerdown", "mousedown", "mouseup"] as const) {
+    control.dispatchEvent(
+      new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 })
+    );
+  }
+}
+
+/**
+ * React-select mounts its menu a tick after the opening mousedown. Poll for
+ * THIS combobox's options (scoped via aria-controls) so the caller neither
+ * misses them nor grabs a stale listbox from another widget.
+ */
+async function waitForComboboxOptions(
+  element: HTMLInputElement,
+  timeoutMs = 700
+): Promise<HTMLElement[]> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const options = collectListboxOptions(resolveActiveListbox(element));
+    if (options.length) return options;
+    await sleep(75);
+  }
+  return collectListboxOptions(resolveActiveListbox(element));
 }
 
 /**
@@ -111,16 +149,16 @@ export async function insertComboboxValue(
 
   openCombobox(element);
 
-  // Pre-type match: only when we can positively tie a listbox to THIS combobox,
-  // so we never click a leftover option from another widget that opened earlier.
-  const earlyScope = resolveActiveListbox(element);
-  if (earlyScope) {
-    const earlyTarget = findMatchingOption(collectListboxOptions(earlyScope), value, widget);
-    if (earlyTarget) {
-      clickOption(earlyTarget);
-      await sleep(150);
-      if (readComboboxDisplayValue(element)) return { ok: true };
-    }
+  // Click-to-select first (no typing): react-select renders its menu a tick
+  // after the open mousedown, so wait for THIS combobox's options before
+  // matching. This is the whole flow for short enum selects (Yes/No) and any
+  // non-searchable control where typing a seed does nothing.
+  const opened = await waitForComboboxOptions(element);
+  const earlyTarget = findMatchingOption(opened, value, widget);
+  if (earlyTarget) {
+    clickOption(earlyTarget);
+    await sleep(150);
+    if (readComboboxDisplayValue(element)) return { ok: true };
   }
 
   const seed = pickTypeaheadSeed(value, widget);
