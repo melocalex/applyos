@@ -27,10 +27,10 @@ export function findRelevantExperience(
   const candidates = [
     ...profile.roles.flatMap((role) => [
       `${role.title} at ${role.company}`,
-      ...role.highlights.map(
+      ...(role.highlights ?? []).map(
         (highlight) =>
           `${role.title} at ${role.company}: ${highlight}${
-            role.technologies.length ? ` Technologies: ${role.technologies.join(", ")}` : ""
+            role.technologies?.length ? ` Technologies: ${role.technologies.join(", ")}` : ""
           }`
       )
     ]),
@@ -39,7 +39,7 @@ export function findRelevantExperience(
       ...(project.highlights ?? []).map(
         (highlight) =>
           `${project.name}: ${highlight}${
-            project.technologies.length ? ` Technologies: ${project.technologies.join(", ")}` : ""
+            project.technologies?.length ? ` Technologies: ${project.technologies.join(", ")}` : ""
           }`
       )
     ]),

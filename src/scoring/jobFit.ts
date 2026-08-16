@@ -58,13 +58,13 @@ export function calculateJobFit(
       ...profile.roles.flatMap((role) => [
         role.title,
         role.company,
-        ...role.highlights,
-        ...role.technologies
+        ...(role.highlights ?? []),
+        ...(role.technologies ?? [])
       ]),
       ...profile.projects.flatMap((project) => [
         project.name,
         project.description,
-        ...project.technologies,
+        ...(project.technologies ?? []),
         ...(project.highlights ?? [])
       ])
     ].join(" ")
