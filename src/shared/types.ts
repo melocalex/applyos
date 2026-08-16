@@ -202,6 +202,7 @@ export interface UserProfile {
   currentCompany?: string;
   linkedinUrl?: string;
   githubUrl?: string;
+  twitterUrl?: string;
   portfolioUrl?: string;
   websiteUrl?: string;
   workAuthorization?: string;

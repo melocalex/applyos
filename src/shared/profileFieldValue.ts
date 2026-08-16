@@ -165,6 +165,9 @@ function resolveProfileLinkValue(field: DetectedField, profile: UserProfile): st
   const label = field.label;
   if (/\blinkedin\b/i.test(label)) return pickProfileString(profile.linkedinUrl);
   if (/\b(github|gitlab)\b/i.test(label)) return pickProfileString(profile.githubUrl);
+  if (/\btwitter\b/i.test(label) || /\bx\.com\b/i.test(label) || /\bx (?:url|handle|profile)\b/i.test(label)) {
+    return pickProfileString(profile.twitterUrl);
+  }
   if (/\bportfolio\b/i.test(label)) return pickProfileString(profile.portfolioUrl);
   if (/\b(personal website|website|web site)\b/i.test(label)) return pickProfileString(profile.websiteUrl);
   return undefined;
